@@ -43,7 +43,8 @@
 #endif
 
 #define C108_VENDOR_ID   0x0d8c
-#define C108_PRODUCT_ID  0x000c
+#define C108_PRODUCT_ID  0x000c 
+#define C108A_PRODUCT_ID  0x013c
 
 #define HID_REPORT_GET 0x01
 #define HID_REPORT_SET 0x09
@@ -56,7 +57,7 @@
 #define	NFFT 1024
 #define	NFFTSQRT 10
 
-#define	AUDIO_IN_SETTING 850
+#define	AUDIO_IN_SETTING 800
 
 #define MIXER_PARAM_MIC_PLAYBACK_SW "Mic Playback Switch"
 #define MIXER_PARAM_MIC_PLAYBACK_VOL "Mic Playback Volume"
@@ -87,11 +88,16 @@ float	mycr;
 float	myci;
 } ;
 
+enum {DEV_C108,DEV_C108AH};
+
+char *devtypestrs[] = {"CM108","CM108AH"} ;
+
 void cdft(int, int, double *, int *, double *);
 
 float myfreq1 = 0.0, myfreq2 = 0.0,lev = 0.0,lev1 = 0.0,lev2 = 0.0;
 
 unsigned int frags = ( ( (6 * 5) << 16 ) | 0xc );
+int devtype = 0;
 int devnum = -1;
 
 /* Call with:  devnum: alsa major device number, param: ascii Formal
@@ -209,8 +215,8 @@ static void setout(struct usb_dev_handle *usb_handle,unsigned char c)
 unsigned char buf[4];
 
 	buf[0] = buf[3] = 0;
-	buf[2] = 7; /* set GPIO 1,2,3 as output */
-	buf[1] = c; /* set GPIO 1,2,3 outputs appropriately */
+	buf[2] = 0xd; /* set GPIO 1,3,4 as output */
+	buf[1] = c; /* set GPIO 1,3,4 outputs appropriately */
 	set_outputs(usb_handle,buf);
 	usleep(100000);
 }
@@ -234,8 +240,14 @@ unsigned short c;
 
 	buf[0] = buf[1] = 0;
 	get_inputs(usb_handle,buf);
-	c = buf[1] & 0xff;
+	c = buf[1] & 0xf;
 	c += (buf[0] & 3) << 4;
+	/* in the AN part, the HOOK comes in on buf[0] bit 4, undocumentedly */
+	if (devtype == DEV_C108AH)
+	{
+		c &= 0xfd;
+		if (!(buf[0] & 0x10)) c += 2;
+	}
 	return(c);
 }
 
@@ -314,8 +326,10 @@ static struct usb_device *device_init(void)
 	         dev = dev->next) {
 	        if ((dev->descriptor.idVendor
 	              == C108_VENDOR_ID) &&
+	            ((dev->descriptor.idProduct
+	              == C108_PRODUCT_ID) ||
 	            (dev->descriptor.idProduct
-	              == C108_PRODUCT_ID))
+	              == C108A_PRODUCT_ID)))
 		{
 	                    sprintf(devstr,"%s/%s", usb_bus->dirname,dev->filename);
 			for(i = 0; i < 32; i++)
@@ -348,7 +362,11 @@ static struct usb_device *device_init(void)
 				break;
 			}
 			if (i >= 32) continue;
-			printf("Found USB Radio Interface at %s\n",devstr);
+			devtype = DEV_C108;
+			if (dev->descriptor.idProduct
+		              == C108A_PRODUCT_ID) devtype = DEV_C108AH;
+			printf("Found %s USB Radio Interface at %s\n",
+				devtypestrs[devtype],devstr);
 			devnum = i;
 			return dev;
 		}
@@ -368,9 +386,9 @@ static int dioerror(unsigned char got, unsigned char should)
 unsigned char err = got ^ should;
 int	n = 0;
 
-	if (err & 0x8) {
-		printf("Error on GPIO1/GPIO4, got %s, should be %s\n",
-			baboons(got & 8),baboons(should & 8));
+	if (err & 0x2) {
+		printf("Error on GPIO1/GPIO2, got %s, should be %s\n",
+			baboons(got & 2),baboons(should & 2));
 		n++;
 		}
 	if (err & 0x10) {
@@ -379,7 +397,7 @@ int	n = 0;
 		n++;
 		}
 	if (err & 0x20) {
-		printf("Error on GPIO2/TONE IN, got %s, should be %s\n",
+		printf("Error on GPIO4/TONE IN, got %s, should be %s\n",
 			baboons(got & 0x20),baboons(should & 0x20));
 		n++;
 		}
@@ -392,7 +410,7 @@ static int testio(struct usb_dev_handle *usb_handle,unsigned char toout,
 unsigned char c;
 
 	setout(usb_handle,toout);  /* should readback 0 */
-	c = getin(usb_handle) & 0xf8;
+	c = getin(usb_handle) & 0xf2;
 	return(dioerror(c,toexpect));
 }
 
@@ -563,6 +581,7 @@ int fd,micmax,spkrmax;
 			short *sbuf = (short *) buf;
 			static double afft[(NFFT + 1) * 2 + 1],wfft[NFFT * 5 / 2];
 			float buck;
+			float gfac;
 			static int ipfft[NFFTSQRT + 2],i;
 
 			res = read(fd,buf,AUDIO_BLOCKSIZE);
@@ -571,6 +590,13 @@ int fd,micmax,spkrmax;
 				continue;
 			}
 			memset(afft,0,sizeof(double) * 2 * (NFFT + 1));
+			gfac = 1.0;
+			if (devtype == DEV_C108AH) gfac = 0.83176;
+			for(i = 0; i < res / 2; i++)
+			{
+				sbuf[i] = (int) (((float)sbuf[i] + 32768) * gfac) - 32768;
+
+			}
 			for(i = 0; i < NFFT * 2; i += 2)
 			{
 				afft[i] = (double)(sbuf[i] + 32768) / (double)65536.0;
@@ -612,11 +638,11 @@ static int digital_test(struct usb_dev_handle *usb_handle)
 int	nerror = 0;
 
 	printf("Testing digital I/O (PTT,COR,TONE and GPIO)....\n");
-	nerror += testio(usb_handle,2,0);
-	nerror += testio(usb_handle,3,8);
-	nerror += testio(usb_handle,6,0x10);
-	nerror += testio(usb_handle,0,0x20);
-	nerror += testio(usb_handle,2,0);
+	nerror += testio(usb_handle,8,0); /* NONE */
+	nerror += testio(usb_handle,9,2); /* GPIO1 -> GPIO2 */
+	nerror += testio(usb_handle,0xc,0x10); /* GPIO3/PTT -> CTCSS */
+	nerror += testio(usb_handle,0,0x20); /* GPIO4 -> COR */
+	nerror += testio(usb_handle,8,0); /* NONE */
 	if (!nerror) printf("Digital I/O passed!!\n");
 	else printf("Digital I/O had %d errors!!\n",nerror);
 	return(nerror);
@@ -736,7 +762,7 @@ struct termios t,t0;
 float myfreq;
 
 	printf("URIDiag, diagnostic program for the DMK Engineering URI\n");
-	printf("USB Radio Interface, version 0.4, 03/22/08\n\n");
+	printf("USB Radio Interface, version 0.6, 08/20/09\n\n");
 
 	usb_dev = device_init();
 	if (usb_dev == NULL) {
@@ -758,7 +784,7 @@ float myfreq;
 		}
 	}
 
-	setout(usb_handle,2);
+	setout(usb_handle,8);
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	pthread_create(&sthread,&attr,soundthread,NULL);
@@ -867,8 +893,8 @@ float myfreq;
 			printf("Special Test Cable Pinout:\n\n");
 			printf("25 pin D-shell connector\n");
 			printf("  Pin 1 to Pin 7\n");
-			printf("  Pin 2 to Pin 4\n");
-			printf("  Pin 3 to Pin 8\n");
+			printf("  Pin 2 to Pin 3\n");
+			printf("  Pin 4 to Pin 8\n");
 			printf("  Pin 11 to Pin 24\n");
 			printf("  10K Resistor between Pins 21 & 22\n");
 			printf("  10K Resistor between Pins 21 & 23\n\n");
