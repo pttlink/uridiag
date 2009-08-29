@@ -1,7 +1,10 @@
 /* Diagnostic program for DMK Engineering URI USB Radio Interface 
  *
- * Copyright (c) 2007-2008, Jim Dixon <jim@lambdatel.com>. All rights
+ * Copyright (c) 2007-2009, Jim Dixon <jim@lambdatel.com>. All rights
  * reserved.
+ *
+ * Analog test levels changed from 700/150 to 610/130 
+ * (passband/stopband) by DMK 8/22/2009.
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -81,6 +84,9 @@
 #define EEPROM_RXCTCSSADJ       13
 #define EEPROM_TXCTCSSADJ       15
 #define EEPROM_RXSQUELCHADJ     16
+
+#define PASSBAND_LEVEL		550.0
+#define STOPBAND_LEVEL		117.0
 
 struct tonevars
 {
@@ -426,8 +432,8 @@ static float get_tonesample(struct tonevars *tvars,float ddr,float ddi)
 	t=2.0-(tvars->mycr*tvars->mycr+tvars->myci*tvars->myci);
 	tvars->mycr*=t;
 	tvars->myci*=t;
-	
-	return tvars->mycr;
+	if (devtype == DEV_C108AH) return tvars->mycr;
+	return tvars->mycr * 0.9092;
 }
 
 static int outaudio(int fd,float freq1, float freq2)
@@ -591,7 +597,7 @@ int fd,micmax,spkrmax;
 			}
 			memset(afft,0,sizeof(double) * 2 * (NFFT + 1));
 			gfac = 1.0;
-			if (devtype == DEV_C108AH) gfac = 0.83176;
+			if (devtype == DEV_C108AH) gfac = 0.7499;
 			for(i = 0; i < res / 2; i++)
 			{
 				sbuf[i] = (int) (((float)sbuf[i] + 32768) * gfac) - 32768;
@@ -674,18 +680,18 @@ static int analog_test(int v)
 {
 int	nerror = 0;
 
-	nerror += analog_test_one(204.0,700.0,700.0,700.0,v);
-	nerror += analog_test_one(504.0,700.0,700.0,700.0,v);
-	nerror += analog_test_one(1004.0,700.0,700.0,700.0,v);
-	nerror += analog_test_one(2004.0,700.0,700.0,700.0,v);
-	nerror += analog_test_one(3004.0,700.0,700.0,700.0,v);
-	nerror += analog_test_one(5004.0,700.0,150.0,700.0,v);
-	nerror += analog_test_one(700.0,204.0,700.0,700.0,v);
-	nerror += analog_test_one(700.0,504.0,700.0,700.0,v);
-	nerror += analog_test_one(700.0,1004.0,700.0,700.0,v);
-	nerror += analog_test_one(700.0,2004.0,700.0,700.0,v);
-	nerror += analog_test_one(700.0,3004.0,700.0,700.0,v);
-	nerror += analog_test_one(700.0,5004.0,700.0,150.0,v);
+	nerror += analog_test_one(204.0,700.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(504.0,700.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(1004.0,700.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(2004.0,700.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(3004.0,700.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(5004.0,700.0,STOPBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(700.0,204.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(700.0,504.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(700.0,1004.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(700.0,2004.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(700.0,3004.0,PASSBAND_LEVEL,PASSBAND_LEVEL,v);
+	nerror += analog_test_one(700.0,5004.0,PASSBAND_LEVEL,STOPBAND_LEVEL,v);
 	if (!nerror) printf("Analog Test Passed!!\n");
 	return(nerror);
 }
@@ -762,7 +768,7 @@ struct termios t,t0;
 float myfreq;
 
 	printf("URIDiag, diagnostic program for the DMK Engineering URI\n");
-	printf("USB Radio Interface, version 0.6, 08/20/09\n\n");
+	printf("USB Radio Interface, version 0.7, 08/29/09\n\n");
 
 	usb_dev = device_init();
 	if (usb_dev == NULL) {
