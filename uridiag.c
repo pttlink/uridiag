@@ -48,6 +48,7 @@
 #define C108_VENDOR_ID   0x0d8c
 #define C108_PRODUCT_ID  0x000c 
 #define C108A_PRODUCT_ID  0x013c
+#define C119_PRODUCT_ID 0x013a
 
 #define HID_REPORT_GET 0x01
 #define HID_REPORT_SET 0x09
@@ -94,9 +95,9 @@ float	mycr;
 float	myci;
 } ;
 
-enum {DEV_C108,DEV_C108AH};
+enum {DEV_C108,DEV_C108AH,DEV_C119};
 
-char *devtypestrs[] = {"CM108","CM108AH"} ;
+char *devtypestrs[] = {"CM108","CM108AH","CM119"} ;
 
 void cdft(int, int, double *, int *, double *);
 
@@ -221,8 +222,9 @@ static void setout(struct usb_dev_handle *usb_handle,unsigned char c)
 unsigned char buf[4];
 
 	buf[0] = buf[3] = 0;
-	buf[2] = 0xd; /* set GPIO 1,3,4 as output */
-	buf[1] = c; /* set GPIO 1,3,4 outputs appropriately */
+	if (devtype == DEV_C119) buf[2] = 0x3d; /* set GPIO 1,3,4,5,6 as output */
+	else buf[2] = 0xd; /* set GPIO 1,3,4 as output */
+	buf[1] = c; /* set GPIO 1,3,4 (5,7) outputs appropriately */
 	set_outputs(usb_handle,buf);
 	usleep(100000);
 }
@@ -248,7 +250,8 @@ unsigned short c;
 	get_inputs(usb_handle,buf);
 	c = buf[1] & 0xf;
 	c += (buf[0] & 3) << 4;
-	/* in the AN part, the HOOK comes in on buf[0] bit 4, undocumentedly */
+	if (devtype == DEV_C119) c += buf[1] & 0xc0;
+	/* in the AH part, the HOOK comes in on buf[0] bit 4, undocumentedly */
 	if (devtype == DEV_C108AH)
 	{
 		c &= 0xfd;
@@ -334,6 +337,8 @@ static struct usb_device *device_init(void)
 	              == C108_VENDOR_ID) &&
 	            ((dev->descriptor.idProduct
 	              == C108_PRODUCT_ID) ||
+		     (dev->descriptor.idProduct
+	              == C119_PRODUCT_ID) ||
 	            (dev->descriptor.idProduct
 	              == C108A_PRODUCT_ID)))
 		{
@@ -371,6 +376,8 @@ static struct usb_device *device_init(void)
 			devtype = DEV_C108;
 			if (dev->descriptor.idProduct
 		              == C108A_PRODUCT_ID) devtype = DEV_C108AH;
+			else if (dev->descriptor.idProduct
+		              == C119_PRODUCT_ID) devtype = DEV_C119;
 			printf("Found %s USB Radio Interface at %s\n",
 				devtypestrs[devtype],devstr);
 			devnum = i;
@@ -402,9 +409,14 @@ int	n = 0;
 			baboons(got & 0x10),baboons(should & 0x10));
 		n++;
 		}
-	if (err & 0x20) {
-		printf("Error on GPIO4/TONE IN, got %s, should be %s\n",
-			baboons(got & 0x20),baboons(should & 0x20));
+	if (err & 0x40) {
+		printf("Error on GPIO5/GPIO7, got %s, should be %s\n",
+			baboons(got & 0x40),baboons(should & 0x40));
+		n++;
+		}
+	if (err & 0x80) {
+		printf("Error on GPIO5/GPIO7, got %s, should be %s\n",
+			baboons(got & 0x80),baboons(should & 0x80));
 		n++;
 		}
 	return(n);
@@ -432,7 +444,8 @@ static float get_tonesample(struct tonevars *tvars,float ddr,float ddi)
 	t=2.0-(tvars->mycr*tvars->mycr+tvars->myci*tvars->myci);
 	tvars->mycr*=t;
 	tvars->myci*=t;
-	if (devtype == DEV_C108AH) return tvars->mycr;
+	if ((devtype == DEV_C108AH) || 
+		(devtype == DEV_C119)) return tvars->mycr;
 	return tvars->mycr * 0.9092;
 }
 
@@ -597,7 +610,7 @@ int fd,micmax,spkrmax;
 			}
 			memset(afft,0,sizeof(double) * 2 * (NFFT + 1));
 			gfac = 1.0;
-			if (devtype == DEV_C108AH) gfac = 0.7499;
+			if ((devtype == DEV_C108AH) || (devtype == DEV_C119)) gfac = 0.7499;
 			for(i = 0; i < res / 2; i++)
 			{
 				sbuf[i] = (int) (((float)sbuf[i] + 32768) * gfac) - 32768;
@@ -648,6 +661,11 @@ int	nerror = 0;
 	nerror += testio(usb_handle,9,2); /* GPIO1 -> GPIO2 */
 	nerror += testio(usb_handle,0xc,0x10); /* GPIO3/PTT -> CTCSS */
 	nerror += testio(usb_handle,0,0x20); /* GPIO4 -> COR */
+	if (devtype == DEV_C119)
+	{
+		nerror += testio(usb_handle,0x18,0x40); /* GPIO5 -> GPIO7 */
+		nerror += testio(usb_handle,0x28,0x80); /* GPIO6 -> GPIO8 */
+	}
 	nerror += testio(usb_handle,8,0); /* NONE */
 	if (!nerror) printf("Digital I/O passed!!\n");
 	else printf("Digital I/O had %d errors!!\n",nerror);
@@ -768,7 +786,7 @@ struct termios t,t0;
 float myfreq;
 
 	printf("URIDiag, diagnostic program for the DMK Engineering URI\n");
-	printf("USB Radio Interface, version 0.7, 08/29/09\n\n");
+	printf("USB Radio Interface, version 0.8, 04/26/11\n\n");
 
 	usb_dev = device_init();
 	if (usb_dev == NULL) {
@@ -903,7 +921,11 @@ float myfreq;
 			printf("  Pin 4 to Pin 8\n");
 			printf("  Pin 11 to Pin 24\n");
 			printf("  10K Resistor between Pins 21 & 22\n");
-			printf("  10K Resistor between Pins 21 & 23\n\n");
+			printf("  10K Resistor between Pins 21 & 23\n");
+			printf("  For URIx (CM119), also include the following:\n");
+			printf("  Pin 5 to Pin 10\n");
+			printf("  Pin 6 to Pin 11\n");
+			printf("  Do *NOT* include these for the standard URI!!\n\n");
 			continue;
 		    default:
 			continue;
