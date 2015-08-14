@@ -786,7 +786,7 @@ struct termios t,t0;
 float myfreq;
 
 	printf("URIDiag, diagnostic program for the DMK Engineering URI\n");
-	printf("USB Radio Interface, version 0.8, 04/26/11\n\n");
+	printf("USB Radio Interface, version 0.9, 08/14/15\n\n");
 
 	usb_dev = device_init();
 	if (usb_dev == NULL) {
@@ -919,7 +919,10 @@ float myfreq;
 			printf("  Pin 1 to Pin 7\n");
 			printf("  Pin 2 to Pin 3\n");
 			printf("  Pin 4 to Pin 8\n");
-			printf("  Pin 11 to Pin 24\n");
+			printf("  If (current) URIx:\n");
+			printf("     Pin 23 to Pin 24\n");
+			printf("  Or, if (original) URI:\n");
+			printf("     Pin 11 to Pin 24\n");
 			printf("  10K Resistor between Pins 21 & 22\n");
 			printf("  10K Resistor between Pins 21 & 23\n");
 			printf("  For URIx (CM119), also include the following:\n");
