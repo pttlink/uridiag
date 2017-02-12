@@ -94,7 +94,7 @@
 struct tonevars
 {
 float	mycr;
-float	myci;setamixer
+float	myci;
 } ;
 
 enum {DEV_C108,DEV_C108AH,DEV_C119};
@@ -133,7 +133,7 @@ snd_ctl_elem_info_t *info;
 	snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
 	snd_ctl_elem_id_set_name(id, param);  
 	elem = snd_hctl_find_elem(hctl, id);
-	if (!elem)setamixer
+	if (!elem)
 	{
 		snd_hctl_close(hctl);
 		return(-1);
@@ -153,7 +153,7 @@ snd_ctl_elem_info_t *info;
 	}
 	snd_hctl_close(hctl);
 	return(rv);
-}setamixer
+}
 
 /* Call with:  devnum: alsa major device number, param: ascii Formal
 Parameter Name, val1, first or only value, val2 second value, or 0 
