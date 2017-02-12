@@ -70,6 +70,8 @@
 #define MIXER_PARAM_MIC_BOOST "Auto Gain Control"
 #define MIXER_PARAM_SPKR_PLAYBACK_SW "Speaker Playback Switch"
 #define MIXER_PARAM_SPKR_PLAYBACK_VOL "Speaker Playback Volume"
+#define	MIXER_PARAM_SPKR_PLAYBACK_SW_NEW "Headphone Playback Switch"
+#define	MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW "Headphone Playback Volume"
 
 #define EEPROM_START_ADDR       6
 #define EEPROM_END_ADDR         63
@@ -92,7 +94,7 @@
 struct tonevars
 {
 float	mycr;
-float	myci;
+float	myci;setamixer
 } ;
 
 enum {DEV_C108,DEV_C108AH,DEV_C119};
@@ -131,7 +133,7 @@ snd_ctl_elem_info_t *info;
 	snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
 	snd_ctl_elem_id_set_name(id, param);  
 	elem = snd_hctl_find_elem(hctl, id);
-	if (!elem)
+	if (!elem)setamixer
 	{
 		snd_hctl_close(hctl);
 		return(-1);
@@ -151,7 +153,7 @@ snd_ctl_elem_info_t *info;
 	}
 	snd_hctl_close(hctl);
 	return(rv);
-}
+}setamixer
 
 /* Call with:  devnum: alsa major device number, param: ascii Formal
 Parameter Name, val1, first or only value, val2 second value, or 0 
@@ -215,7 +217,7 @@ static void set_outputs(struct usb_dev_handle *handle,
 	      0 + (HID_RT_OUTPUT << 8),
 	      3,
 	      (char*)outputs, 4, 5000);
-}
+}setamixer
 
 static void setout(struct usb_dev_handle *usb_handle,unsigned char c)
 {
@@ -257,7 +259,7 @@ unsigned short c;
 		c &= 0xfd;
 		if (!(buf[0] & 0x10)) c += 2;
 	}
-	return(c);
+	return(c);setamixer
 }
 
 static unsigned short read_eeprom(struct usb_dev_handle *usb_handle, int addr)
@@ -558,15 +560,22 @@ char	device[200];
 void *soundthread(void *this)
 {
 int fd,micmax,spkrmax;
-
+char newname = 0;
+	
 	fd = soundopen(devnum);
 	micmax = amixer_max(devnum,MIXER_PARAM_MIC_CAPTURE_VOL);
 	spkrmax = amixer_max(devnum,MIXER_PARAM_SPKR_PLAYBACK_VOL);
-
+	
+	if (spkrmax == -1) 
+	{
+		newname = 1;
+		spkrmax = amixer_max(devnum,MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW);
+	}
+	
 	setamixer(devnum,MIXER_PARAM_MIC_PLAYBACK_SW,0,0);
 	setamixer(devnum,MIXER_PARAM_MIC_PLAYBACK_VOL,0,0);
-	setamixer(devnum,MIXER_PARAM_SPKR_PLAYBACK_SW,1,0);
-	setamixer(devnum,MIXER_PARAM_SPKR_PLAYBACK_VOL,spkrmax,spkrmax);
+	setamixer(devnum,(newname) ? MIXER_PARAM_SPKR_PLAYBACK_SW_NEW : MIXER_PARAM_SPKR_PLAYBACK_SW,1,0);
+	setamixer(devnum,(newname) ? MIXER_PARAM_SPKR_PLAYBACK_VOL_NEW : MIXER_PARAM_SPKR_PLAYBACK_VOL,spkrmax,spkrmax);
 	setamixer(devnum,MIXER_PARAM_MIC_CAPTURE_VOL,
 			AUDIO_IN_SETTING * micmax / 1000,0);
 	setamixer(devnum,MIXER_PARAM_MIC_BOOST,0,0);
