@@ -217,7 +217,7 @@ static void set_outputs(struct usb_dev_handle *handle,
 	      0 + (HID_RT_OUTPUT << 8),
 	      3,
 	      (char*)outputs, 4, 5000);
-}setamixer
+}
 
 static void setout(struct usb_dev_handle *usb_handle,unsigned char c)
 {
@@ -259,7 +259,7 @@ unsigned short c;
 		c &= 0xfd;
 		if (!(buf[0] & 0x10)) c += 2;
 	}
-	return(c);setamixer
+	return(c);
 }
 
 static unsigned short read_eeprom(struct usb_dev_handle *usb_handle, int addr)
